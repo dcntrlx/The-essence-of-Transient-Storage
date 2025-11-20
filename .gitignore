@@ -1,0 +1,4 @@
+.deps/
+contracts/.deps/
+contracts/artifacts/
+remix.config.json
