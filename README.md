@@ -49,6 +49,8 @@ For storage operations, the gas costs depend heavily on whether the slot is "col
 | **TransientLock (normal execution)**       | `TLOAD`, `TSTORE`, `TSTORE` | 100 + 100 + 100 = **300**       | **300** (no refund)      |
 | **TransientLock (reverted by reentrancy)** | `TLOAD`                     | **100**                         | **100** (no refund)      |
 
+[Detailed opcodes costs](https://www.evm.codes)
+Also details about SSTORE/SLOAD opcodes costs and cold/warm access: [EIP2929](https://eips.ethereum.org/EIPS/eip-2929) and continued in [EIP2930](https://eips.ethereum.org/EIPS/eip-2930)
 #### Corollary
 For both successful and reverted execution, we observe a **~2000 gas difference**.
 
