@@ -6,11 +6,11 @@ The main goal of this project is to provide a concise recap of Transient Storage
 
 I am starting by comparing regular storage to transient storage, including gas metrics.
 
-In the future it would be nice also to compare memory and transient storage
+**Future Scope:** Comparison between Memory and Transient Storage costs.
 
 ---
 
-### Reentrancy Implementations: Storage vs Transient Storage
+### 1. Reentrancy Protection: Storage vs Transient Storage
 
 To make this comparison fair, all unrelated logic has been removed.
 Because of this simplification, both implementations may exhibit unsafe behavior and **must not** be used in production.
@@ -27,14 +27,16 @@ For clarity, all opcodes unrelated to storage or transient-storage access have b
 ---
 
 #### Storage-Related Opcode Costs
-For storage operations, the gas costs are written as cold(prewarmed using access list)  
-All storage operations with cold (i.e. used at first time) slots 2100 gas require additionaly
-| Operation | Gas Cost                   | Persistent | EIP  |
-| --------- | -------------------------- | ---------- | ---- |
-| `SLOAD`   | 100   | Yes        | 2929 |
-| `SSTORE`  | 20,000 (0→1); 100 gas for access to dirty slot and Refund 19900 for writening back to original value (1->0 here) | Yes        | 2200 |
-| `TLOAD`   | ~100                       | No         | 1153 |
-| `TSTORE`  | ~100                       | No         | 1153 |
+For storage operations, the gas costs depend heavily on whether the slot is "cold" (accessed for the first time in the transaction) or "warm".
+
+| Operation | Gas Cost (Warm) | Gas Cost (Cold) | Persistent | EIP |
+| --------- | --------------- | --------------- | ---------- | --- |
+| `SLOAD`   | 100             | 2100            | Yes        | 2929|
+| `SSTORE`  | 100 (dirty)     | 22100 (init)    | Yes        | 2200|
+| `TLOAD`   | 100             | 100             | No         | 1153|
+| `TSTORE`  | 100             | 100             | No         | 1153|
+
+*Note: `SSTORE` costs vary significantly based on the current value, new value, and original value (e.g., 20k gas for 0->1, 5k for 1->2, refunds for clearing).*
 
 ---
 
@@ -42,10 +44,32 @@ All storage operations with cold (i.e. used at first time) slots 2100 gas requir
 
 | Case                                       | Storage Opcodes Used        | Raw Gas Cost                    | Net Cost After Refund    |
 | ------------------------------------------ | --------------------------- | ------------------------------- | ------------------------ |
-| **StorageLock (normal execution)**         | `SLOAD`, `SSTORE`, `SSTORE` | (2100(1900) for SLOAD cold access) + 20000 + 100 +  = **22200(22000)** | 22200(22000) - 19900 = **2300(2200)** |
+| **StorageLock (normal execution)**         | `SLOAD`, `SSTORE`, `SSTORE` | (2100(1900) for SLOAD cold access) + 20000 + 100 +  = **22200(22000)** | 22200(22000) - 19900 = **2300(2100)** |
 | **StorageLock (reverted by reentrancy)**   | `SLOAD`                     | **2100**                        | **2100** (no refund)     |
 | **TransientLock (normal execution)**       | `TLOAD`, `TSTORE`, `TSTORE` | 100 + 100 + 100 = **300**       | **300** (no refund)      |
 | **TransientLock (reverted by reentrancy)** | `TLOAD`                     | **100**                         | **100** (no refund)      |
 
-### Corollary
-Main difference between gas prices between storage and transient storage is that storage uses warming mechanism, which costs 2100(1900)(in fact 2000(1800) because SLoad is free when we are paying for cold access) gas and creates big difference between storage and transient storage realizations gas prices.
+#### Corollary
+For both successful and reverted execution, we observe a **~2000 gas difference**.
+
+The primary cost difference stems from the **"Cold Load" penalty** in regular storage. Accessing a storage slot for the first time costs ~2100 gas, whereas transient storage slots are always "warm" and cost only 100 gas. This makes transient storage ideal for temporary state like reentrancy locks.
+
+---
+
+### 2. Context Passing (Callback) Pattern
+Another powerful use case is passing context to callbacks without polluting `msg.data` or using expensive storage. 
+Actually using Transient storage costs more gas than using calldata if there are not many indermediate contracts(<3-4) But Transient storage allows:
+- to pass context to callbacks without polluting `msg.data`
+- pass data which couldn't be passed to untrusted intermediate contracts, because they can modify it. (Storage can be used. But it will cost thousands of gas)
+
+See [TransientContext.sol](./contracts/TransientContext.sol).
+
+**Scenario:**
+1. Contract A sets a "Context" (e.g., who is the real initiator etc) in transient storage.
+2. Contract A calls Contract B.
+3. Contract B calls back Contract A (e.g., `receive()` or a specific callback).
+4. Contract A reads the "Context" from transient storage to know who initiated the flow.
+
+**Benefit:**
+- Gas Efficiency for cases where is is impossible to pass data through intermediate contracts(security reasons e.g.): `TSTORE`/`TLOAD` (100 gas) vs `SSTORE`/`SLOAD` (thousands of gas).
+- Cleaner Interfaces: No need to append extra arguments to every function call just to pass context through intermediate contracts. 
