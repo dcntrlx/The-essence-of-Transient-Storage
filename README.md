@@ -27,11 +27,12 @@ For clarity, all opcodes unrelated to storage or transient-storage access have b
 ---
 
 #### Storage-Related Opcode Costs
-
+For storage operations, the gas costs are written as cold(prewarmed using access list)  
+All storage operations with cold (i.e. used at first time) slots 2100 gas require additionaly
 | Operation | Gas Cost                   | Persistent | EIP  |
 | --------- | -------------------------- | ---------- | ---- |
-| `SLOAD`   | 2100 (cold) / 100 (warm)   | Yes        | 2929 |
-| `SSTORE`  | 20,000 (0→1) / 5,000 (1→0) | Yes        | 2200 |
+| `SLOAD`   | 100   | Yes        | 2929 |
+| `SSTORE`  | 20,000 (0→1); 100 gas for access to dirty slot and Refund 19900 for writening back to original value (1->0 here) | Yes        | 2200 |
 | `TLOAD`   | ~100                       | No         | 1153 |
 | `TSTORE`  | ~100                       | No         | 1153 |
 
@@ -41,9 +42,10 @@ For clarity, all opcodes unrelated to storage or transient-storage access have b
 
 | Case                                       | Storage Opcodes Used        | Raw Gas Cost                    | Net Cost After Refund    |
 | ------------------------------------------ | --------------------------- | ------------------------------- | ------------------------ |
-| **StorageLock (normal execution)**         | `SLOAD`, `SSTORE`, `SSTORE` | 2100 + 20000 + 5000 = **27100** | 27100 − 4900 = **22200** |
+| **StorageLock (normal execution)**         | `SLOAD`, `SSTORE`, `SSTORE` | (2100(1900) for SLOAD cold access) + 20000 + 100 +  = **22200(22000)** | 22200(22000) - 19900 = **2300(2200)** |
 | **StorageLock (reverted by reentrancy)**   | `SLOAD`                     | **2100**                        | **2100** (no refund)     |
 | **TransientLock (normal execution)**       | `TLOAD`, `TSTORE`, `TSTORE` | 100 + 100 + 100 = **300**       | **300** (no refund)      |
 | **TransientLock (reverted by reentrancy)** | `TLOAD`                     | **100**                         | **100** (no refund)      |
 
-
+### Corollary
+Main difference between gas prices between storage and transient storage is that storage uses warming mechanism, which costs 2100(1900)(in fact 2000(1800) because SLoad is free when we are paying for cold access) gas and creates big difference between storage and transient storage realizations gas prices.
